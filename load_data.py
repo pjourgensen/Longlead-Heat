@@ -9,10 +9,7 @@ password = "xxxx"
 path = "/Datasets/noaa.oisst.v2.highres/"
 save_path = "Data/"
 
-filename_begin = "sst.day.anom."
-filenames = []
-for i in range(yr_begin,yr_end+1):
-    fn_ends.append(filename_begin+str(i)+".nc")
+filenames = ["sst.day.anom."+str(i)+".nc" for i in list(range(yr_begin,yr_end+1))]
 
 ftp = ftplib.FTP(host = host_name)
 ftp.login(username,password)
