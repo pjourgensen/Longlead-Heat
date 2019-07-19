@@ -10,13 +10,39 @@ a neural network model. The steps for doing so include:
 import numpy as np
 import xarray as xr
 
+import ftplib
+
 class SSTPreparer:
 
-  def __init__(self):
-      pass
+  def __init__(self,config):
+      self.yr_begin = config['yr_begin']
+      self.yr_end = config['yr_end']
+      self.out_path = config['out_path']
 
   def load_data(self):
-      pass
+      cont = input("Loading may take awhile. Are you sure you want to download data from {} to {}? ('y' or 'n')".format(self.yr_begin,self.yr_end))
+      while cont.lower() != 'y' or cont.lower() != 'n':
+          cont = input("Please enter 'y' or 'n': ")
+
+      if cont.lower() == 'n':
+          print("Exiting load sequence...")
+          return
+      else:
+          host_name = "ftp.cdc.noaa.gov"
+          username = "anonymous"
+          password = "xxxx"
+          path = "/Datasets/noaa.oisst.v2.highres/"
+
+          filenames = ["sst.day.anom."+str(i)+".nc" for i in list(range(self.yr_begin,self.yr_end+1))]
+
+          ftp = ftplib.FTP(host = host_name)
+          ftp.login(username,password)
+          ftp.cwd(path)
+
+          for j in filenames:
+              print("loading "+j[-7:-3])
+              ftp.retrbinary("RETR "+j,open(self.out_path+j[-7:],"wb").write)
+
 
   def combine_data(self):
       pass
