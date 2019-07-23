@@ -1,0 +1,11 @@
+{
+  "yr_begin" : 1982,
+  "yr_end" : 2015,
+  "out_path" : "../Data/",
+  "data_fn" : "combined.nc",
+  "min_lat" : 20,
+  "max_lat": 50,
+  "min_lon": 145,
+  "max_lon": 230,
+  "nbases" : 5  
+}
