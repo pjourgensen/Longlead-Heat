@@ -9,26 +9,37 @@ a neural network model. The steps for doing so include:
 
 import numpy as np
 import xarray as xr
+import pandas as pd
 
+import json
 import ftplib
 
 class SSTPreparer:
 
-  def __init__(self,config):
+  def __init__(self,config_json):
+      with open(config_json) as json_file:
+          config = json.load(json_file)
+
       self.yr_begin = config['yr_begin']
       self.yr_end = config['yr_end']
       self.out_path = config['out_path']
       self.data_fn = config['data_fn']
+      self.target_path = config['target_path']
       self.min_lat = config['min_lat']
       self.max_lat = config['max_lat']
       self.min_lon = config['min_lon']
       self.max_lon = config['max_lon']
       self.nbases = config['nbases']
-      self.data = None
 
-  def load_data(self):
+      self.data = None
+      self.data_dates = None
+      self.target = None
+      self.target_dates = None
+      self.coefs = None
+
+  def load_sst_data(self):
       cont = input("Loading may take awhile. Are you sure you want to download data from {} to {}? ('y' or 'n')".format(self.yr_begin,self.yr_end))
-      while cont.lower() != 'y' or cont.lower() != 'n':
+      while cont.lower() != 'y' and cont.lower() != 'n':
           cont = input("Please enter 'y' or 'n': ")
 
       if cont.lower() == 'n':
@@ -51,7 +62,7 @@ class SSTPreparer:
               ftp.retrbinary("RETR "+j,open(self.out_path+j[-7:],"wb").write)
 
 
-  def combine_data(self,save_data=False):
+  def combine_sst_data(self,save_data: bool=False):
       filenames = [str(i)+'.nc' for i in list(range(self.yr_begin,self.yr_end+1))]
 
       combined = xr.open_dataarray('Data/'+filenames[0])
@@ -71,39 +82,73 @@ class SSTPreparer:
       else:
           self.data = combined
 
+  def load_target(self):
+      self.target = xr.open_dataarray(self.target_path)
 
-  def train_test_split(self):
-      pass
+  def remove_leap_dates(self):
+      self.target_dates = pd.to_datetime(self.target.time.values)
+      target_nonleap = np.where(np.logical_or(self.target_dates.month!=2,self.target_dates.day!=29))[0]
+      self.target_dates = self.target_dates[target_nonleap]
+      self.target = self.target[target_nonleap]
 
-  def remove_trend(self):
-      if self.data == None:
-          self.data = xr.open_dataarray(self.out_path+self.data_fn)
+      self.data_dates = pd.to_datetime(self.data.time.values)
+      data_nonleap = np.where(np.logical_or(self.data_dates.month!=2,self.data_dates.day!=29))[0]
+      self.data_dates = self.data_dates[data_nonleap]
+      self.data = self.data[data_nonleap]
 
-      data = self.data.load()
-      time_len = len(data['time'])
-      lat_len = len(data['lat'])
-      lon_len = len(data['lon'])
+  def reshape_daily(self):
+      days_in_year = 365
+      num_years = self.yr_end - self.yr_begin + 1
+      lat_len = len(self.data.lat)
+      lon_len = len(self.data.lon)
 
-      doy_vec = np.arange(1,time_len+1)
+      day_array = xr.DataArray(np.zeros((days_in_year,num_years,lat_len,lon_len)),
+                               dims=['doy','year','lat','lon'],
+                               coords={'doy':np.arange(1,days_in_year+1),
+                                       'year':np.arange(self.yr_begin,self.yr_end+1),
+                                       'lat':self.data.lat.values,
+                                       'lon':self.data.lon.values})
 
-      data = data.stack(ll=('lat','lon'))
-      coefs = np.polyfit(doy_vec,data,deg=1)
+      doy = 0
+      for j in range(1,13):
+          for i in range(1,32):
+              curr = self.data[np.where(np.logical_and(self.data_dates.day==i,self.data_dates.month==j))]
+              if curr.size > 0:
+                  day_array[doy] = curr
+                  doy += 1
 
-      for i in range(2):
-          data -= (np.power(doy_vec,2-(i+1))).reshape((time_len,1))*coefs[i].reshape((1,lat_len*lon_len))
+      self.data = day_array
 
-      self.data = data.unstack()
+  def fit_trendline(self,day):
 
-  def remove_daily_trend(self):
-      pass
+      year_len = len(day.year)
+      lat_len = len(day.lat)
+      lon_len = len(day.lon)
 
-  def remove_seasonality(self):
-      if self.data == None:
-          self.data = xr.open_dataarray(self.out_path+self.data_fn)
+      doy_vec = np.arange(1,year_len+1)
+      day = day.stack(ll=('lat','lon'))
+      coefs = np.polyfit(doy_vec,day,deg=1)
+      coefs = coefs.reshape((2,lat_len,lon_len))
 
-      data = self.data.load()  # need to use a couple times
-      time_len = len(data['time'])
+      return coefs
 
+  def fit_all_trendlines(self):
+      days_in_year = 365
+      num_coefs = 2
+      lat_len = len(self.data.lat)
+      lon_len = len(self.data.lon)
+      self.coefs = xr.DataArray(np.zeros((days_in_year,num_coefs,lat_len,lon_len)),
+                                dims=['doy','coef','lat','lon'],
+                                coords={'doy':np.arange(1,days_in_year+1),
+                                        'coef':['slope','intercept'],
+                                        'lat':self.data.lat.values,
+                                        'lon':self.data.lon.values})
+
+      for day in self.data.doy.values:
+          self.coefs.loc[day,:] = self.fit_trendline(self.data.loc[day,:])
+
+  def remove_seasonality(self,coef):
+      time_len = len(coef.doy)
       doy_vec = np.arange(1,time_len+1)
 
       t_basis = (doy_vec - 0.5)/365
@@ -112,15 +157,54 @@ class SSTPreparer:
       for counter in range(self.nbases):
           bases[counter, :] = np.exp(2*(counter + 1)*np.pi*1j*t_basis)
 
+      coef -= coef.reduce(np.mean, dim='time')
+      fourier_coef = 2/nt*(np.sum(bases[..., np.newaxis, np.newaxis]*coef.values[np.newaxis, ...], axis=1))
+      rec = np.real(np.conj(fourier_coef[:, np.newaxis, ...])*bases[..., np.newaxis, np.newaxis])
 
-      data -= data.reduce(np.mean, dim='time')
+      return coef - np.sum(rec, axis=0)
 
-      coeff = 2/nt*(np.sum(bases[..., np.newaxis, np.newaxis]*data.values[np.newaxis, ...], axis=1))
+  def remove_coef_seasonality(self):
+      slope = self.coefs.loc[:,'slope',:,:].copy(deep=True)
+      intercept = self.coefs.loc[:,'intercept',:,:].copy(deep=True)
+      self.coefs.loc[:,'slope',:,:] = self.remove_seasonality(slope) + self.coefs.loc[:,'slope',:,:].mean(axis=0)
+      self.coefs.loc[:,'intercept',:,:] = self.remove_seasonality(intercept) + self.coefs.loc[:,'intercept',:,:].mean(axis=0)
 
-      rec = np.real(np.conj(coeff[:, np.newaxis, ...])*bases[..., np.newaxis, np.newaxis])
+  def remove_daily_trends(self):
+      year_vec = np.arange(1,len(self.data.year)+1).reshape((1,len(self.data.year),1,1))
+      self.data -= self.coefs.loc[:,'slope',:,:].expand_dims(dim='year',axis=1) * year_vec
+      self.data = self.data.transpose('year','doy','lat','lon') - self.coefs.loc[:,'intercept',:,:]
+      self.data = self.data.transpose('doy','year','lat','lon')
 
-      self.data = data - np.sum(rec, axis=0)
+  def reshape_sequential(self):
+      seq_len = len(self.data.doy) * len(self.data.year)
+      lat_len = len(self.data.lat)
+      lon_len = len(self.data.lon)
 
+      data = xr.DataArray(np.zeros((seq_len,lat_len,lon_len)),
+                         dims=['time','lat','lon'],
+                         coords={'time':np.arange(1,seq_len+1),
+                                 'lat':self.data.lat.values,
+                                 'lon':self.data.lon.values})
+
+      doy = 0
+      for j in range(1,13):
+          for i in range(1,32):
+              day_idx = np.where(np.logical_and(self.data_dates.day==i,self.data_dates.month==j))[0]
+              if len(day_idx) > 0:
+                  data[day_idx,:,:] = self.data[doy,:,:,:]
+                  doy += 1
+
+      self.data = data
+
+  def run_detrending(self):
+      self.reshape_daily()
+      self.fit_all_trendlines()
+      self.remove_coef_seasonality()
+      self.remove_daily_trends()
+      self.reshape_sequential()
+
+  def train_test_split(self):
+      pass
 
   def prepare_target(self):
       pass
