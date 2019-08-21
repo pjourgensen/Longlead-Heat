@@ -1,0 +1,18 @@
+{
+    "yr_begin": 1982,
+    "yr_end": 2015,
+    "data_path": "Data/",
+    "sst_inpath": "Data/sst_final.nc",
+    "sst_outpath": "Data/out_filename.nc",
+    "target_inpath": "Data/t95.nc",
+    "target_outpath": "Data/target.nc",
+    "target_levels": [67,33],
+    "min_lat": 20,
+    "max_lat": 50,
+    "min_lon": 145,
+    "max_lon": 230,
+    "seq_len": 5,
+    "interval": 3,
+    "lead_time": 10,
+    "split_year": 2005
+}
