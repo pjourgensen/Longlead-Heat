@@ -62,14 +62,6 @@ class SSTPreparer:
         minimum longitude to consider for analysis
     max_lon: int
         maximum longitude to consider for analysis
-    seq_len: int
-        number of days used by neural network for single prediction
-    interval: int
-        number of days in between days used for prediction (min=1)
-    lead_time: int
-        number of days to forecast into the future
-    split_year: int
-        year used for train/test split (year is included in test set)
 
     Methods
     -------
@@ -108,31 +100,27 @@ class SSTPreparer:
         with open(config_json) as json_file:
             config = json.load(json_file)
 
-            self.yr_begin = config['yr_begin']
-            self.yr_end = config['yr_end']
-            self.data_path = config['data_path']
-            self.sst_inpath = config['sst_inpath']
-            self.sst_outpath = config['sst_outpath']
-            self.target_inpath = config['target_inpath']
-            self.target_outpath = config['target_outpath']
-            self.target_levels = config['target_levels']
-            self.min_lat = config['min_lat']
-            self.max_lat = config['max_lat']
-            self.min_lon = config['min_lon']
-            self.max_lon = config['max_lon']
-            self.seq_len = config['seq_len']
-            self.interval = config['interval']
-            self.lead_time = config['lead_time']
-            self.split_year = config['split_year']
+        self.yr_begin = config['yr_begin']
+        self.yr_end = config['yr_end']
+        self.data_path = config['data_path']
+        self.sst_inpath = config['sst_inpath']
+        self.sst_outpath = config['sst_outpath']
+        self.target_inpath = config['target_inpath']
+        self.target_outpath = config['target_outpath']
+        self.target_levels = config['target_levels']
+        self.min_lat = config['min_lat']
+        self.max_lat = config['max_lat']
+        self.min_lon = config['min_lon']
+        self.max_lon = config['max_lon']
 
-            self.data = None
-            self.data_dates = None
-            self.lat_len = None
-            self.lon_len = None
-            self.channel = None
-            self.target = None
-            self.target_dates = None
-            self._coefs = None
+        self.data = None
+        self.data_dates = None
+        self.lat_len = None
+        self.lon_len = None
+        self.channel = None
+        self.target = None
+        self.target_dates = None
+        self._coefs = None
 
     def download_sst(self):
         """Facilitates dowonload of raw SST data from NOAA.
@@ -404,10 +392,14 @@ class SSTPreparer:
             encoded target values
         target_dates: pandas.core.indexes.datetimes.DatetimeIndex
             dates corresponding to each entry of target
+        target_levels: list
+            descending list of percentiles (85th percentile -> 85, not 0.85) with which to encode target
         """
 
         self.target = xr.open_dataarray(self.target_inpath)
         self.target_dates = pd.to_datetime(self.target.time.values)
+        if len(self.target_levels) > 1:
+            self.target_levels.append(0)
 
     def prepare_sst(self):
         """Facilitates preparation of SST data according to download_raw_sst and combine_raw_sst.
@@ -461,6 +453,6 @@ class SSTPreparer:
         Run this method with appropriate boolean attributes to ensure data and target
         are properly prepared. See individual method docstrings for more help.
         """
-        
+
         self.prepare_sst()
         self.prepare_target()
