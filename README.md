@@ -46,6 +46,7 @@ The purpose of this project is to develop a forecasting model for heatwave event
 3. Download the requirements.
 4. Update configs as needed. Refer to docstrings for more details.
 5. In "train.py", update parameters as needed. Refer to docstrings for more details.
+6. Run "train.py"
 
 ## For more detail and discussion:
 * [Blog Post](https://pjourgensen.github.io/longlead_pred.html)
