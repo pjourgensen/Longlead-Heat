@@ -1,6 +1,6 @@
 # Gene Selection for Acute Leukemias
 
-#### -- Project Status: [Completed]
+#### -- Project Status: [Active]
 
 ## Intro/Objective
 The purpose of this project is to develop a forecasting model for heatwave events for the intended use of informing agricultural planning and community preparation. The data that will be used for developing this model is Sea Surface Temperature (SST) data that has been collated by the NOAA. SST data is a valuable factor in climate modeling and weather forecasting and has had demonstrated success in similar models[1]. In this project, I plan to apply neural networks to this data in an effort to predict heatwave events in the Eastern US.
