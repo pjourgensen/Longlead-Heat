@@ -1,8 +1,4 @@
-"""
-This script is intended to govern theself.model construction, training,
-testing, and prediction of data generated from SSTPreparer. Neural
-network is developed with tensorflow.
-"""
+
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import ConvLSTM2D, MaxPool3D
 from tensorflow.keras.layers import Flatten, Dense, Dropout
@@ -11,11 +7,58 @@ from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.optimizers import Adadelta
 from tensorflow.keras.metrics import categorical_accuracy
 from tensorflow.keras.callbacks importself.modelCheckpoint, EarlyStopping
-import sstpreparer
 
 class MyConvLSTM:
+    """
+    A class used for the initialization, construction, training, and prediction for a ConvLSTM model.
+    ...
+
+    Attributes
+    ----------
+    processor: SSTPreparer
+        an SSTPreparer object used to facilitate data management
+    model: tensorflow.python.keras.engine.sequential.Sequential
+        Keras based sequential model
+    history: tensorflow.python.keras.callbacks.History
+        Keras callback history of trained model
+
+    Config Attributes
+    -----------------
+    seq_len: int
+        number of days used for forecasting
+    interval: int
+        number of days between chosen days for forecasting
+    lead_time: int
+        number of days into the future to forecast
+    split_yeat: int
+        year for train/test split. Included in test set
+    model_outpath: str
+        file path to store final model
+    batch_size: int
+        batch_size to be used for training
+    steps_per_epoch: int
+        number of batches to include per epoch. Typically total data size / batch_size
+    epochs: int
+        number of epochs for model training
+    validation_size: int
+        number of test samples to use for validation each epoch
+
+    Methods
+    -------
+    fit()
+        runs training procedure on model
+    """
 
     def __init__(self, config_json: str=None, Processor: SSTPreparer=None):
+        """
+        Parameters
+        ----------
+        config_json: str
+            file path to a config file that contains "Config Attributes"
+        Processor: SSTPreparer
+            an SSTPreparer object used to facilitate data management
+        """
+
         self.processor = Processor
 
         with open(config_json) as json_file:
@@ -29,11 +72,14 @@ class MyConvLSTM:
         self.batch_size = config['batch_size']
         self.steps_per_epoch = config['steps_per_epoch']
         self.epochs = config['epochs']
+        self.validation_size = config['validation_size']
 
-        self.model = Sequential()
+        self.model = self._get_model()
         self.history = None
 
-    def generator(self, Processor: SSTPreparer=None, batch_size: int=None, train: bool=True):
+    def _generator(self, Processor: SSTPreparer=None, batch_size: int=None, train: bool=True):
+        """Loads batch data and target into working memory for each training iteration"""
+
         batch_features = np.zeros((batch_size,self.seq_len,self.processor.lat_len,self.processor.lon_len,self.processor.channel))
         batch_labels = np.zeros((batch_size,3))
 
@@ -53,7 +99,10 @@ class MyConvLSTM:
                 batch_labels[i] = self.processor.target[target_idx].values
             yield batch_features, batch_labels
 
-    def get_model(self):
+    def _get_model(self):
+        """Initializes keras sequential neural network model"""
+
+        self.model = Sequential()
         self.model.add(ConvLSTM2D(filters=32,
                                       kernel_size=(5,5),
                                       input_shape=(self.seq_len,self.processor.lat_len,self.processor.lon_len,self.processor.channel),
@@ -84,25 +133,42 @@ class MyConvLSTM:
         self.model.compile(loss=loss,optimizer=opt,metrics=[mets])
 
     def fit(self):
-        earlyStopping = EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='min')
+        """Runs training procedure on model
+
+        Model is saved to model_outpath and callback history is stored in history attribute. Early
+        stopping and model checkpoint are used to ensure optimal model is saved over the course
+        of training.
+
+        Attributes
+        ----------
+        early_stopping: tensorflow.python.keras.callbacks.EarlyStopping
+            stops model training when performance drop is signaled
+        mcp_save: tensorflow.python.keras.callbacks.ModelCheckpoint
+            periodically saves model with each improvement in performance
+        model_outpath: str
+            file path to store final model
+        history: tensorflow.python.keras.callbacks.History
+            keras callback history of model
+        processor: SSTPreparer
+            an SSTPreparer object used to facilitate data management
+        batch_size: int
+            batch_size to be used for training
+        steps_per_epoch: int
+            number of batches to include per epoch. Typically total data size / batch_size
+        epochs: int
+            number of epochs for model training
+        validation_size: int
+            number of test samples to use for validation each epoch
+        """
+
+        early_stopping = EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='min')
         mcp_save = ModelCheckpoint(self.model_outpath, save_best_only=True, monitor='val_loss', mode='min')
 
-        self.history = model.fit_generator(generator=self.generator(self.processor,self.batch_size,True),
+        self.history = model.fit_generator(generator=self._generator(self.processor,self.batch_size,True),
                                       steps_per_epoch=self.steps_per_epoch,
                                       epochs=self.epochs,
-                                      callbacks=[earlyStopping, mcp_save],
-                                      validation_data=self.generator(self.processor,self.validation_size,False),
+                                      callbacks=[early_stopping, mcp_save],
+                                      validation_data=self._generator(self.processor,self.validation_size,False),
                                       validation_steps=1,
                                       shuffle=False,
                                       initial_epoch=0)
-
-
-if __name__ == '__main__':
-    processor = SSTPreparer('Configs/sstpreparer_config.json',
-                            download_raw_sst = False,
-                            combine_raw_sst = False,
-                            load_raw_t95 = False)
-    constructor = MyConvLSTM('Configs/myconvlstm_config.json',
-                             Procesor = processor)
-    constructor.get_model()
-    constructor.fit()
