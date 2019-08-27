@@ -1,0 +1,11 @@
+{
+  "seq_len": 5,
+  "interval": 3,
+  "lead_time": 15,
+  "split_year": 2005,
+  "model_outpath": "../Models/base_model.hdf5",
+  "batch_size": 80,
+  "steps_per_epoch": 100,
+  "epochs": 100,
+  "validation_size": 200
+}
